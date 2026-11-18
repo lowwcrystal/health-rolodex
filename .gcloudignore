@@ -1,0 +1,20 @@
+.gcloudignore
+.git
+.gitignore
+.env
+.env.*
+.venv/
+.tools/
+__pycache__/
+*.py[cod]
+*.log
+proxy-key*.json
+*-key.json
+*credentials*.json
+secrets/
+.DS_Store
+frontend/node_modules/
+frontend/src/
+
+# Local notes (not needed in the deployed app)
+*.md
