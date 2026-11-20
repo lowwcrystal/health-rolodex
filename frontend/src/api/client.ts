@@ -1,4 +1,6 @@
-/** The only place the frontend calls fetch. Every API module goes through `request`. */
+/** The only place the frontend makes AJAX calls (jQuery `$.ajax`). Every API module goes through `request`. */
+
+import $ from "jquery";
 
 export class ApiError extends Error {
   constructor(
@@ -12,28 +14,40 @@ export class ApiError extends Error {
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
-export async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
-  let response: Response;
+/** Flask answers with JSON; read it as text so an empty body is not treated as an error. */
+function parseJson(text: string | undefined): unknown {
+  if (!text) return null;
   try {
-    response = await fetch(`/api${path}`, {
-      method,
-      credentials: "same-origin",
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
+    return JSON.parse(text);
   } catch {
-    throw new ApiError("Can't reach the server. Check your connection and try again.", 0);
+    return null;
   }
+}
 
-  const data: unknown = await response.json().catch(() => null);
-  if (!response.ok) {
-    const message =
-      data && typeof data === "object" && "error" in data && typeof data.error === "string"
-        ? data.error
-        : `Request failed (${response.status}).`;
-    throw new ApiError(message, response.status);
-  }
-  return data as T;
+export function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    $.ajax({
+      url: `/api${path}`,
+      method,
+      dataType: "text",
+      contentType: body === undefined ? false : "application/json",
+      data: body === undefined ? undefined : JSON.stringify(body),
+      processData: false,
+    })
+      .done((text: string) => resolve(parseJson(text) as T))
+      .fail((xhr: JQuery.jqXHR) => {
+        if (xhr.status === 0) {
+          reject(new ApiError("Can't reach the server. Check your connection and try again.", 0));
+          return;
+        }
+        const data = parseJson(xhr.responseText);
+        const message =
+          data && typeof data === "object" && "error" in data && typeof data.error === "string"
+            ? data.error
+            : `Request failed (${xhr.status}).`;
+        reject(new ApiError(message, xhr.status));
+      });
+  });
 }
 
 export const get = <T>(path: string) => request<T>("GET", path);
